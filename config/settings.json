@@ -1,0 +1,49 @@
+{
+  "system": {
+    "version": "2.0",
+    "mode": "multi-sport",
+    "run_type": "gameday",
+    "auto_run": true
+  },
+  "sports_enabled": {
+    "nfl": true,
+    "mlb": true,
+    "nba": true,
+    "nhl": true,
+    "mls": true,
+    "tennis": true,
+    "ncaaf": true
+  },
+  "parlay_generation": {
+    "min_parlays_per_day": 5,
+    "max_parlays_per_day": 10,
+    "leg_structure": {
+      "4_leg": 0.4,
+      "5_leg": 0.6
+    },
+    "confidence_threshold": {
+      "min_green": 75,
+      "min_yellow": 65,
+      "min_red": 55
+    }
+  },
+  "data_sources": {
+    "espn_api": "https://site.api.espn.com/apis/site/v2/",
+    "odds_api": "https://api.the-odds-api.com/v4/",
+    "nba_api": "https://data.nba.net/v2/prod/v1/",
+    "mlb_statsapi": "https://statsapi.mlb.com/api/v1/",
+    "nfl_api": "https://api.espn.com/v2/sports/football/nfl/"
+  },
+  "output_format": {
+    "report_type": "markdown",
+    "include_confidence": true,
+    "include_roi": true,
+    "include_payout": true,
+    "rank_by": "expected_value"
+  },
+  "tracking": {
+    "enable_logging": true,
+    "log_level": "INFO",
+    "retention_days": 90
+  }
+}
