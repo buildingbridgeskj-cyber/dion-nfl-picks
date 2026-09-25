@@ -1,0 +1,98 @@
+[
+  {
+    "game_id": "2026-w01-ne-at-sea",
+    "sport": "nfl",
+    "market": "prop_rush_yards",
+    "selection": "UNDER",
+    "line": "55.5",
+    "won": true,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 51, Rhamondre Stevenson"
+  },
+  {
+    "game_id": "2026-w01-sf-at-la",
+    "sport": "nfl",
+    "market": "total",
+    "selection": "UNDER",
+    "line": "48.5",
+    "won": true,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 34"
+  },
+  {
+    "game_id": "2026-w01-sf-at-la",
+    "sport": "nfl",
+    "market": "prop_pass_yards",
+    "selection": "OVER",
+    "line": "263.5",
+    "won": false,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 155, Matthew Stafford"
+  },
+  {
+    "game_id": "2026-w01-sf-at-la",
+    "sport": "nfl",
+    "market": "prop_rec_yards",
+    "selection": "OVER",
+    "line": "90.5",
+    "won": false,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 74, Puka Nacua"
+  },
+  {
+    "game_id": "2026-w01-sf-at-la",
+    "sport": "nfl",
+    "market": "prop_rec_yards",
+    "selection": "OVER",
+    "line": "37.5",
+    "won": false,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 12, George Kittle"
+  },
+  {
+    "game_id": "2026-w01-sf-at-la",
+    "sport": "nfl",
+    "market": "prop_rush_yards",
+    "selection": "OVER",
+    "line": "60.5",
+    "won": true,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 68, Christian McCaffrey"
+  },
+  {
+    "game_id": "2026-w01-sf-at-la",
+    "sport": "nfl",
+    "market": "prop_rush_yards",
+    "selection": "OVER",
+    "line": "56.5",
+    "won": false,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 41, Kyren Williams"
+  },
+  {
+    "game_id": "2026-w01-sf-at-la",
+    "sport": "nfl",
+    "market": "prop_rush_yards",
+    "selection": "OVER",
+    "line": "35.5",
+    "won": true,
+    "week": 1,
+    "graded_at": "2026-09-25T20:30:21",
+    "source": "Agent_Dion_2026_Week1_Master_Ledger (strict audit record)",
+    "note": "actual 54, Blake Corum"
+  }
+]

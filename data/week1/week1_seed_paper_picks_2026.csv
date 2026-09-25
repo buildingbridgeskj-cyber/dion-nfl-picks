@@ -1,0 +1,17 @@
+pick_type,player,team,market,side,line,seed_score,reason,mode
+PROP,Lamar Jackson,BAL,pass_yards,OVER,219.5,78,Colts ranked 31st vs pass in referenced matchup analysis.,PAPER ONLY
+PROP,Jaxson Dart,NYG,pass_yards,OVER,211.5,78,Dallas allowed 265.9 passing yards/game in referenced matchup analysis.,PAPER ONLY
+PROP,Tua Tagovailoa,ATL,pass_yards,UNDER,208.5,77,Recent underdog/2025 trend favors under around this threshold.,PAPER ONLY
+PROP,C.J. Stroud,HOU,pass_yards,UNDER,218.5,75,Draws referenced top-ranked Buffalo pass defense.,PAPER ONLY
+PROP,Jordan Love,GB,pass_yards,UNDER,241.5,74,Draws referenced No. 2 Minnesota secondary.,PAPER ONLY
+PROP,Bucky Irving,TB,rush_yards,OVER,57.5,80,Cincinnati referenced as last-ranked run defense.,PAPER ONLY
+PROP,Javonte Williams,DAL,rush_yards,OVER,73.5,79,Giants referenced as 31st-ranked rush defense.,PAPER ONLY
+PROP,Quinshon Judkins,CLE,rush_yards,UNDER,59.5,78,Jacksonville referenced as first-ranked run defense.,PAPER ONLY
+PROP,Rhamondre Stevenson,NE,rush_yards,UNDER,55.5,76,Hard Seattle matchup and market moved line sharply upward.,PAPER ONLY
+PROP,D’Andre Swift,CHI,rush_yards,UNDER,69.5,75,Failed to exceed this neighborhood in four of last five referenced games.,PAPER ONLY
+PROP,Jaylen Warren,PIT,rush_yards,OVER,40.5,75,Cleared 40.5 in six of last seven as favorite in referenced trend.,PAPER ONLY
+PROP,Malik Nabers,NYG,rec_yards,OVER,60.5,79,Favorable Dallas matchup noted in receiving analysis.,PAPER ONLY
+PROP,DeVonta Smith,PHI,rec_yards,OVER,65.5,77,Favorable matchup versus porous Washington secondary.,PAPER ONLY
+PROP,Nico Collins,HOU,rec_yards,UNDER,69.5,75,Difficult Buffalo-secondary matchup.,PAPER ONLY
+PROP,Christian Watson,GB,rec_yards,UNDER,56.5,74,Stingy Minnesota pass defense.,PAPER ONLY
+PROP,Mark Andrews,BAL,rec_yards,OVER,34.5,74,Favorable Indianapolis pass-defense matchup.,PAPER ONLY

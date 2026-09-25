@@ -8,7 +8,7 @@ pkg update && pkg install python git
 cd ~
 git clone https://github.com/buildingbridgeskj-cyber/dion-nfl-picks.git
 cd dion-nfl-picks
-pip install requests
+pip install -r requirements.txt
 ```
 
 ### Step 2: Run Everything (1 command)
@@ -143,9 +143,10 @@ chmod 755 output
 ## 📋 What Dion Does
 
 - Tracks all NFL picks week-by-week
-- Maintains historical accuracy (Week 1: 6-4 = 60%)
+- Confidence baselines calibrate to YOUR real graded results over time
+  (starts empty - grade picks with `record_result()` to build history)
 - Builds 4-5 leg NFL-only parlays
-- Keeps frozen picks immutable after kickoff
+- Freezes the top card pre-kickoff as an immutable record (`data/week{N}/`)
 
 **Learning Rules:**
 - Never overwrites prior data
@@ -228,29 +229,24 @@ nano models/agent_cox_mlb_ncaaf.py
 
 **Change parlay leg count (3-5):**
 ```python
-parlays = self.build_nfl_parlays(picks, min_parlays=5)  # Change min_parlays
+parlays = self.build_parlays(picks, top_n=5)  # Change top_n for more/fewer parlays
 ```
 
 ---
 
-## 🎓 Historical Data (Week 1)
+## 📓 Historical Data (your learning history)
 
-**Week 1 Summary:**
-- Game 1 (Patriots @ Seahawks): 3-0 ✅
-- Game 2 (49ers @ Rams): 3-4 ✅
-- **Total: 6-4 (60.0% hit rate)**
+**How it works:** after games finish, grade each pick:
 
-All data preserved immutably in:
+```python
+from models.agent_dion_nfl import record_result
+record_result(game_id="...", sport="nfl", market="spread",
+              selection="Bills", line="-7", won=True, week=3)
 ```
-data/
-├── week1/
-│   ├── game1_ne_sea/
-│   ├── game2_sf_la/
-│   └── ...
-├── week2/
-├── week3/
-└── ...
-```
+
+Graded picks accumulate in `data/results.json`. Once a market has 10+ graded
+picks, confidence baselines automatically calibrate toward your real observed
+hit rate. Frozen pre-kickoff cards are preserved immutably in `data/week{N}/`.
 
 Never overwritten. Ever.
 
