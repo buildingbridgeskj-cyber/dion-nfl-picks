@@ -345,8 +345,8 @@ def make_report(groups, day, errors, used_api):
         f"Date (Eastern): {day} | Games: {len(groups)}",
         "",
         "**Goal: six player-prop selections from EACH team, 12 per matchup, sorted best-to-worst.**",
-        "Elite Screen /100 is derived from quoted market-implied prices, not an independent prediction,",
-        "hit rate, value edge, or proven success probability. The most likely side is not always good value.",
+        "Elite Rank 99–88 is DISPLAY ORDER within each game, not a 99% success claim.",
+        "Market % is derived from quoted market-implied prices, NOT an independent forecast, value edge, or win-rate estimate.",
         "Missing player props are never invented. Check injury, status, freshness and DraftKings lines.",
         "",
     ]
@@ -358,16 +358,16 @@ def make_report(groups, day, errors, used_api):
             f"## {title} — {kickoff}",
             f"**Player picks: {len(picks)}/12 | {game['away_abbr']}: {away} | {game['home_abbr']}: {home}**",
             "",
-            "| # | Elite Screen | Team | Player | Market | Pick | Line | Odds |",
-            "|---:|---:|---|---|---|---|---|---:|",
+            "| # | Elite Rank | Market % | Team | Player | Market | Pick | Line | Odds |",
+            "|---:|---:|---:|---|---|---|---|---|---:|",
         ]
         for rank, p in enumerate(picks, 1):
             score = f'{p["score"]}/100' if p["score"] is not None else "N/R"
-            values = [rank, score, p["team"], p["player"], p["market"],
+            values = [rank, f"{100-rank}/100", score, p["team"], p["player"], p["market"],
                       p["selection"], p["line"], p["odds"]]
             lines.append("| " + " | ".join(safe(value) for value in values) + " |")
         if not picks:
-            lines.append("| — | — | — | No verified player-prop feed | — | — | — | — |")
+            lines.append("| — | — | — | — | No verified player-prop feed | — | — | — | — |")
         if len(picks) < 10:
             lines.append(f"\n**DATA SHORTFALL:** Only {len(picks)} verified/attributed markets; cannot honestly supply 10–12.")
         lines += ["", f"**Game lines (reference only):** {game_lines(game)}", ""]
@@ -382,6 +382,26 @@ def make_report(groups, day, errors, used_api):
     return "\n".join(lines)
 
 
+def fetch_date_slate(agent, target):
+    """Query the requested Eastern date, including future 9:30 AM international games."""
+    params = {"dates": target.replace("-", ""), "limit": 100}
+    params["dates"] = target.replace("-", "").replace("-", "")
+    response = get_json(
+        "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+        params,
+    )
+    games = []
+    for event in response.get("events", []):
+        game = agent._parse_game(event)
+        if game and not game["final"] and eastern_date(game["date"]) == target:
+            games.append(game)
+    if games:
+        return games
+    # Fallback when ESPN date-scoped endpoint does not cover the requested date.
+    return [game for game in agent.fetch_nfl_games()
+            if eastern_date(game["date"]) == target]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Top 12 NFL player props per game, six from each team if available.")
     parser.add_argument("--date", default=today_et(), help="Eastern YYYY-MM-DD (default today)")
@@ -390,7 +410,7 @@ def main():
     args = parser.parse_args()
     agent = AgentDion()
     try:
-        games = [g for g in agent.fetch_nfl_games() if eastern_date(g["date"]) == args.date]
+        games = fetch_date_slate(agent, args.date)
     except Exception as exc:
         print(f"ESPN schedule unavailable ({type(exc).__name__}); no stale schedule used.", file=sys.stderr)
         return 1
@@ -419,14 +439,14 @@ def main():
         (mission / "dion_elite_today.md").write_text(report, encoding="utf-8")
 
     print(f"AGENT DION | {args.date} | {len(groups)} GAMES | SIX PER TEAM / 12 PER GAME")
-    print("ELITE SCREEN = MARKET PRICE RANK, NOT MODEL HIT PROBABILITY")
+    print("ELITE RANK 99-88 = DISPLAY ORDER ONLY; MARKET % IS NOT MODEL HIT PROBABILITY")
     for game, kickoff, picks in groups:
         print("\n" + "=" * 78)
         print(f'{game["away_abbr"]} @ {game["home_abbr"]} | {kickoff} | {len(picks)}/12 picks')
         print("=" * 78)
         for rank, row in enumerate(picks, 1):
             score = f'{row["score"]:02d}/100' if row["score"] is not None else "N/R"
-            print(f'{rank:2d}. {score:>6} | {row["team"]:3s} | {row["player"][:19]:19s} | '
+            print(f'{rank:2d}. {100-rank:02d}/100 | Market {score:>6} | {row["team"]:3s} | {row["player"][:19]:19s} | '
                   f'{row["market"][:15]:15s} | {row["selection"]} {row["line"]} ({row["odds"]})')
         if len(picks) < 10:
             print(f'  DATA SHORTFALL: Only {len(picks)} real available picks; no fabricated selections.')
