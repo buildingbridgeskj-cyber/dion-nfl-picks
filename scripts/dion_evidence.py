@@ -124,6 +124,9 @@ def finished_events(team, target, season, limit=8):
         if completed is None:
             comps = ev.get("competitions") or []
             completed = bool(comps and comps[0].get("status", {}).get("type", {}).get("completed"))
+        season_kind = (ev.get("season") or {}).get("type")
+        if season_kind in (1, "1"):
+            continue  # preseason samples are not NFL regular-season evidence
         if completed and stamp < cutoff:
             events.append((stamp, str(ev["id"])))
     events.sort(reverse=True)
@@ -257,6 +260,10 @@ def estimate_candidate(item, player_games, team_games, team_events, roster_entri
     p["defense_adjustment_pct"] = round((adj - 1) * 100, 1) if matchup_ready else None
     sd = statistics.stdev(values) if n > 1 else 0.0
     sd = max(sd, FLOORS.get(market, 1), abs(forecast) * .22)
+    days_since_last_game = (datetime.fromisoformat(target).replace(tzinfo=timezone.utc) - samples[-1][0]).days
+    if days_since_last_game > 21:
+        p["status"] = "PASS: player results stale (>21 days)"
+        return p
     p["projection"] = round(forecast, 1)
     z = (threshold - forecast) / sd
     over_p = .5 * math.erfc(z / math.sqrt(2))
