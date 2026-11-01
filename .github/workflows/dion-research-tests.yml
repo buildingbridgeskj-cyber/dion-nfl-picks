@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/dion_evidence.py'
+      - 'scripts/dion_validation.py'
       - 'scripts/dion_elite_board.py'
       - 'tests/test_dion_evidence.py'
       - '.github/workflows/dion-research-tests.yml'
@@ -19,6 +20,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Check Python syntax
-        run: python -m compileall -q scripts/dion_evidence.py scripts/dion_elite_board.py models/agent_dion_nfl.py
+        run: python -m compileall -q scripts/dion_evidence.py scripts/dion_elite_board.py scripts/dion_validation.py models/agent_dion_nfl.py
       - name: Offline unit tests
         run: python -m unittest discover -s tests -p test_dion_evidence.py -v
