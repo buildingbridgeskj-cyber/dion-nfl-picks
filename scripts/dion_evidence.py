@@ -7,6 +7,7 @@ Fail closed when data is absent. Backtesting/calibration required before real be
 """
 import math
 import statistics
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -138,21 +139,35 @@ def collect_history(games, target, max_games=8):
     season = int(target[:4])
     team_events = {}
     warnings = []
-    for g in games:
-        for team in (g["home_abbr"], g["away_abbr"]):
-            if team in team_events:
-                continue
-            try:
-                team_events[team] = finished_events(team, target, season, max_games)
-            except Exception as ex:
-                team_events[team] = []
-                warnings.append(f"{team} schedule unavailable: {type(ex).__name__}")
-    summaries = {}
-    for _, ev in sorted({item for history in team_events.values() for item in history}):
+    teams = sorted({team for g in games for team in (g["home_abbr"], g["away_abbr"])})
+    def get_team_schedule(team):
         try:
-            summaries[ev] = extract_boxscore(fetch("summary", {"event": ev}, ttl=259200))
+            return team, finished_events(team, target, season, max_games), None
+        except Exception as exc:
+            return team, [], f"{team} schedule unavailable: {type(exc).__name__}"
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(get_team_schedule, team) for team in teams]
+        for future in as_completed(futures):
+            team, history, warning = future.result()
+            team_events[team] = history
+            if warning:
+                warnings.append(warning)
+
+    event_ids = {ev for history in team_events.values() for _, ev in history}
+    def get_summary(event_id):
+        try:
+            return event_id, extract_boxscore(fetch("summary", {"event": event_id}, ttl=259200))
         except Exception:
-            continue
+            return event_id, None
+
+    summaries = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(get_summary, event_id) for event_id in event_ids]
+        for future in as_completed(futures):
+            event_id, result = future.result()
+            if result:
+                summaries[event_id] = result
     player_games = defaultdict(list)
     team_games = defaultdict(list)
     for team, history in team_events.items():
@@ -356,6 +371,8 @@ def roster_health_from_api(games):
 
 def evaluate(games, slate_props, target):
     """Attach per-pick data-driven model output. Returns results + coverage notes."""
+    if not any(slate_props.get(g["id"]) for g in games):
+        return {g["id"]: [] for g in games}, ["No live/imported player props; skipped history requests."]
     player_games, team_games, team_events, warnings = collect_history(games, target)
     roster_entries = roster_health_from_api(games)
     evaluated = {}
