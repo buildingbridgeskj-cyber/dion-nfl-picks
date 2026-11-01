@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dion unified ranked board. Research display only: no wager execution."""
+"""Dion grouped ranked board. Research display only: no wager execution."""
 import argparse
 import csv
 import sys
@@ -81,33 +81,65 @@ def safe(value):
     return str(value).replace("|", "/").replace("\n", " ").strip()
 
 
-def report(rows, target, count, props_count):
-    heading = [
-        "# AGENT DION — UNIFIED ELITE BOARD",
-        f"Date (Eastern): {target} | Game slate: {count} | Ranked candidates: {len(rows)}",
+def grouped_games(rows, games):
+    """One section per game; strongest available score first within each section."""
+    by_game = {}
+    for row in rows:
+        by_game.setdefault(row["game"], []).append(row)
+    result = []
+    for game in sorted(games, key=lambda g: g.get("date") or ""):
+        key = f'{game["away_abbr"]} @ {game["home_abbr"]}'
+        try:
+            kickoff = datetime.fromisoformat(
+                game["date"].replace("Z", "+00:00")
+            ).astimezone(ET).strftime("%I:%M %p %Z")
+        except (KeyError, ValueError, TypeError):
+            kickoff = "Kickoff unavailable"
+        result.append((key, kickoff, by_game.pop(key, [])))
+    for key in sorted(by_game):
+        result.append((key, "Imported matchup; kickoff unverified", by_game[key]))
+    for key, kickoff, entries in result:
+        entries.sort(key=lambda row: (
+            row["score"] is None, -(row["score"] or 0), row["market"], row["selection"]
+        ))
+    return result
+
+
+def report(groups, target, count, props_count):
+    lines = [
+        "# AGENT DION — ELITE RANKINGS BY GAME",
+        f"Date (Eastern): {target} | Games: {count}",
         "",
-        "**Elite Score /100 is a research-priority ranking, NOT a win probability or verified betting edge.**",
-        "Existing game-market scores come from Dion's unvalidated deterministic baseline.",
-        "Imported player-prop scores are shown only if supplied; scores of 99/100 are never invented.",
-        "ESPN odds can be missing or delayed. Check live sportsbook lines and injury status before use.",
+        "**Elite Score /100 is a preliminary research ranking, NOT a win probability or proven edge.**",
+        "Existing market scores use Dion's unvalidated baseline; player-prop scores are imported only.",
+        "Verify current odds, injury status, and statistical support before considering any selection.",
         "",
-        "| Rank | Elite Score | Selection | Market | Line | Game | Odds | Status |",
-        "|---:|---:|---|---|---|---|---|---|",
     ]
-    for i, r in enumerate(rows, 1):
-        score = f'{r["score"]}/100' if r["score"] is not None else "N/R"
-        cells = [i, score, r["selection"], r["market"], r["line"],
-                 r["game"], r["odds"], r["note"]]
-        heading.append("| " + " | ".join(safe(x) for x in cells) + " |")
-    if not rows:
-        heading.append("| — | — | No qualifying games or imported props | — | — | — | — | — |")
-    heading += [
+    for game, kickoff, picks in groups:
+        lines += [
+            f"## {game} — {kickoff}",
+            "",
+            "| Rank | Elite Score | Market | Selection | Line | Odds | Status |",
+            "|---:|---:|---|---|---|---|---|",
+        ]
+        for number, pick in enumerate(picks, 1):
+            score = f'{pick["score"]}/100' if pick["score"] is not None else "N/R"
+            values = [number, score, pick["market"], pick["selection"],
+                      pick["line"], pick["odds"], pick["note"]]
+            lines.append("| " + " | ".join(safe(value) for value in values) + " |")
+        if not picks:
+            lines.append("| — | — | — | No scored markets available | — | — | — |")
+        lines.append("")
+    if not groups:
+        lines.append("No games or imported props found for this date.")
+    lines += [
         "",
-        f"Player props loaded from CSV: {props_count}. No live player-prop feed is installed here.",
-        "No wagers placed. Other V14 scanners and services are not modified.",
+        f"Player props imported: {props_count}. No automatic live player-prop feed is installed.",
+        "N/R means no valid market line or score; missing values are never invented.",
+        "No bets placed. Other V14 scanners and services are not modified.",
         "",
     ]
-    return "\n".join(heading)
+    return "\n".join(lines)
 
 
 def main():
@@ -124,28 +156,32 @@ def main():
     games = [g for g in all_games if same_date(g, args.date)]
     game_rows = source_candidates(agent, games)
     prop_rows = imported_props(args.props)
-    rows = game_rows + prop_rows
-    rows.sort(key=lambda r: (r["score"] is None, -(r["score"] or 0),
-                             r["game"], r["market"], r["selection"]))
-    final = report(rows, args.date, len(games), len(prop_rows))
+    groups = grouped_games(game_rows + prop_rows, games)
+    final = report(groups, args.date, len(games), len(prop_rows))
     output = ROOT / "output" / f'dion_elite_{args.date}.md'
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(final, encoding="utf-8")
     mission = Path.home() / "v14-mission-control"
     if mission.is_dir():
         (mission / "dion_elite_today.md").write_text(final, encoding="utf-8")
-    print(f"AGENT DION — ALL MARKETS RANKED | {args.date}")
-    print("Elite Score = preliminary research score, NOT probability\n")
-    print("RANK SCORE   MARKET       SELECTION / LINE                       GAME")
-    print("-" * 87)
-    for i, r in enumerate(rows, 1):
-        score = f'{r["score"]:02d}/100' if r["score"] is not None else "N/R"
-        selection = safe(r["selection"] + " " + r["line"])[:37]
-        print(f'{i:>3}  {score:>6}  {r["market"][:11]:<11}  {selection:<37} {r["game"]}')
-    if not rows:
-        print("No current-day candidates found.")
+
+    print(f"AGENT DION — ELITE RANKINGS BY GAME | {args.date}")
+    print("Elite Scores are preliminary research rankings, not win probabilities.")
+    for game, kickoff, picks in groups:
+        print(f"\n{'=' * 72}")
+        print(f"{game}  |  {kickoff}")
+        print(f"{'=' * 72}")
+        print("RANK  SCORE   MARKET       SELECTION / LINE")
+        for i, row in enumerate(picks, 1):
+            score = f'{row["score"]:02d}/100' if row["score"] is not None else "N/R"
+            selection = safe(row["selection"] + " " + row["line"])[:49]
+            print(f'{i:>3}   {score:>6}  {row["market"][:11]:<11}  {selection}')
+        if not picks:
+            print("No scored markets available.")
+    if not groups:
+        print("No games or imported props available for this date.")
     if not prop_rows:
-        print("\nPLAYER PROPS: No CSV found. They are not invented.")
+        print("\nPLAYER PROPS: No CSV loaded; player props have not been invented.")
     print(f"\nSAVED: {output}")
     print("NO BETS PLACED")
     return 0
