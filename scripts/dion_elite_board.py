@@ -385,7 +385,6 @@ def make_report(groups, day, errors, used_api):
 def fetch_date_slate(agent, target):
     """Query the requested Eastern date, including future 9:30 AM international games."""
     params = {"dates": target.replace("-", ""), "limit": 100}
-    params["dates"] = target.replace("-", "").replace("-", "")
     response = get_json(
         "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
         params,
