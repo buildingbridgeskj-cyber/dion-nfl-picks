@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from scripts.dion_evidence import extract_boxscore, estimate_candidate, opponent_factor
 from scripts.dion_elite_board import choose_top_12
+from scripts.dion_validation import grade_item
 
 
 class EvidenceTests(unittest.TestCase):
@@ -52,6 +53,16 @@ class EvidenceTests(unittest.TestCase):
         factor, ready = opponent_factor("DAL", "ARI", "Receiving yards", {}, {})
         self.assertEqual(factor, 1.0)
         self.assertFalse(ready)
+
+    def test_pregame_grading_from_actual_stat(self):
+        pick = {"market": "Receiving yards", "player": "Sample WR",
+                "team": "DAL", "line": "67.5", "side": "Over"}
+        box = {("DAL", "sample wr"): {("receiving", "yds"): 82}}
+        self.assertEqual(grade_item(pick, box), ("WIN", 82))
+        pick["side"] = "Under"
+        self.assertEqual(grade_item(pick, box), ("LOSS", 82))
+        pick["line"] = "82"
+        self.assertEqual(grade_item(pick, box), ("PUSH", 82))
 
     def test_six_per_team_when_available(self):
         game = {"away_abbr": "ARI", "home_abbr": "DAL"}
