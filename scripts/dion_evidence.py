@@ -161,7 +161,9 @@ def collect_history(games, target, max_games=8):
             for (t, player), metrics in players.items():
                 if t == team:
                     player_games[(team, player)].append((stamp, metrics))
-            team_games[team].append((stamp, totals, team, event_id))
+            others = [t for t, category, metric in totals if t != team]
+            opposing_team = others[0] if others else None
+            team_games[team].append((stamp, totals, team, event_id, opposing_team))
     return player_games, team_games, team_events, warnings
 
 
@@ -176,22 +178,28 @@ def last_values(player_games, team, player, stat, target):
     return samples[-10:]
 
 
-def opponent_allowance(opponent, category, team_events, summaries, team_games):
-    # Optional defensive context is derived from actual opponent team box scores.
-    pass
-
-
 def opponent_factor(team, opponent, market, team_games, team_events):
-    """Conservative +/− 6% schedule adjustment, using actual team-level totals."""
+    """Cap opponent allowed per-game impact to ±5%; require >=4 valid games."""
     key = STAT_MAP.get(market)
     if not key or market == "Anytime TD":
         return 1.0, False
-    own = [totals.get((team, *key)) for _, totals, _, _ in team_games.get(team, [])]
+    own = [totals.get((team, *key)) for _, totals, _, _, _ in team_games.get(team, [])]
     own = [v for v in own if v is not None and v > 0]
-    # Defense allowed is computed using opposing team totals from past games.
-    # Need actual opponent teams in their past box scores, not their own output.
-    # Not enough verified allowance data => neutral adjustment.
-    return 1.0, False
+    allowed = [
+        totals.get((other, *key))
+        for _, totals, _, _, other in team_games.get(opponent, [])
+        if other
+    ]
+    allowed = [v for v in allowed if v is not None and v > 0]
+    if len(allowed) < 4 or len(own) < 4:
+        return 1.0, False
+    own_avg = statistics.mean(own)
+    allow_avg = statistics.mean(allowed)
+    if own_avg <= 0:
+        return 1.0, False
+    ratio = max(.90, min(1.10, allow_avg / own_avg))
+    # Half-weighted ratio only; noisy aggregate defense, not position-level grades.
+    return 1 + .5 * (ratio - 1), True
 
 
 def injury_status(roster_entries, team, name):
@@ -243,6 +251,10 @@ def estimate_candidate(item, player_games, team_games, team_events, roster_entri
     p["last5"] = f"{sum(hit(v) for v in recent)}/{len(recent)}"
     p["last10"] = f"{sum(hit(v) for v in values)}/{n}"
     forecast = .65 * statistics.mean(recent) + .35 * statistics.mean(values)
+    opponent = p.get("opponent", "")
+    adj, matchup_ready = opponent_factor(p["team"], opponent, market, team_games, team_events)
+    forecast *= adj
+    p["defense_adjustment_pct"] = round((adj - 1) * 100, 1) if matchup_ready else None
     sd = statistics.stdev(values) if n > 1 else 0.0
     sd = max(sd, FLOORS.get(market, 1), abs(forecast) * .22)
     p["projection"] = round(forecast, 1)
@@ -274,15 +286,16 @@ def estimate_candidate(item, player_games, team_games, team_events, roster_entri
     count_component = min(25, n * 3)
     signal_component = min(15, int(abs(hit_rate - .5) * 22))
     edge_component = max(0, min(30, round(160 * edge)))
-    freshness_component = 8 if samples[-1][0] >= datetime.fromisoformat(target).replace(tzinfo=timezone.utc).replace(day=1) else 3
-    p["elite_score"] = min(99, int(10 + count_component + signal_component + edge_component + freshness_component))
+    days_since = (datetime.fromisoformat(target).replace(tzinfo=timezone.utc) - samples[-1][0]).days
+    freshness_component = 8 if days_since <= 16 else 3
+    p["elite_score"] = min(99, int(10 + count_component + signal_component + edge_component + freshness_component + (5 if matchup_ready else 0)))
     if p["injury"] == "QUESTIONABLE":
         p["elite_score"] = min(p["elite_score"], 55)
         p["status"] = "HOLD: questionable"
     elif n < 6 or edge < .05:
         p["status"] = "PASS: no supported 5% edge"
     else:
-        p["status"] = "REVIEW ONLY: uncalibrated edge; confirm injury & line"
+        p["status"] = "REVIEW ONLY: uncalibrated edge; verify inactives & line"
     return p
 
 
@@ -321,8 +334,11 @@ def evaluate(games, slate_props, target):
     for game in games:
         game_id = game["id"]
         evaluated[game_id] = [
-            estimate_candidate(item, player_games, team_games, team_events,
-                               roster_entries, target)
+            estimate_candidate(
+                {**item, "opponent": game["away_abbr"] if item["team"] == game["home_abbr"]
+                 else game["home_abbr"]},
+                player_games, team_games, team_events, roster_entries, target
+            )
             for item in slate_props.get(game_id, [])
         ]
     return evaluated, warnings
