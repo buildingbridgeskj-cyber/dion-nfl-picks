@@ -459,7 +459,25 @@ def main():
         pool = predictive.get(game["id"], [])
         groups.append((game, kickoff, choose_top_12(pool, game)))
 
+    from scripts.dion_validation import grade_history, snapshot
+    try:
+        metrics = grade_history()
+    except Exception as exc:
+        metrics = {"graded": 0, "validation": "UNAVAILABLE"}
+        warnings.append(f"Grading history unavailable ({type(exc).__name__})")
+    try:
+        frozen_path, frozen_count = snapshot(args.date, groups)
+    except Exception as exc:
+        frozen_path, frozen_count = None, 0
+        warnings.append(f"Pregame snapshot unavailable ({type(exc).__name__})")
     report = make_report(groups, args.date, warnings, bool(key and not args.no_live))
+    report += "\n\n## Out-of-sample grading\n"
+    report += f"Previously graded selections: {metrics.get('graded', 0)}. "
+    if metrics.get("hit_rate") is not None:
+        report += f"Hit rate: {metrics['hit_rate']}%. Brier: {metrics.get('brier')}."
+    else:
+        report += "No verified graded sample yet."
+    report += "\nStatus: uncalibrated until a sufficiently large walk-forward sample exists."
     output = ROOT / "output" / f'dion_elite_{args.date}.md'
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report, encoding="utf-8")
@@ -492,6 +510,8 @@ def main():
             print(" -", msg)
     print(f"\nSAVED: {output}")
     print(f"New per-event Odds API requests: {credits_calls} (usage fees/credits may apply).")
+    print(f"PRE-GAME SNAPSHOT: {frozen_count} candidates frozen at {frozen_path or 'unavailable'}")
+    print(f"HISTORICAL GRADES: {metrics.get('graded', 0)} | {metrics.get('validation', 'UNVALIDATED')}")
     print("NO BETS PLACED")
     return 0
 
