@@ -228,26 +228,27 @@ def live_props(games, key, roster):
                     }
         entries = []
         for (player, team, category, _), sides in by_market.items():
-            # Choose the higher implied-likelihood direction for each player/market.
-            # This is market pricing, NOT independent model analysis or a value signal.
-            side, quoted = max(sides.items(), key=lambda x: x[1]["probability"])
-            if category == "player_anytime_td":
-                side = "Yes"
-            fair_prob = quoted["probability"]
-            if "Over" in sides and "Under" in sides:
-                denominator = sides["Over"]["probability"] + sides["Under"]["probability"]
-                fair_prob = fair_prob / denominator if denominator else fair_prob
-            entries.append({
-                "game": f'{game["away_abbr"]} @ {game["home_abbr"]}',
-                "team": team, "player": player,
-                "market": MARKET_LABELS[category],
-                "selection": side,
-                "line": str(quoted["point"]) if quoted["point"] is not None else "Yes",
-                "odds": display_odds(quoted["price"]),
-                "score": min(99, max(1, round(100 * fair_prob))),
-                "note": "Market-implied pricing score; not a forecast or proven edge",
-                "source": "DraftKings via The Odds API",
-            })
+            total_implied = sum(q["probability"] for k, q in sides.items()
+                                if k in ("Over", "Under"))
+            for side, quote in sides.items():
+                if category != "player_anytime_td" and side not in ("Over", "Under"):
+                    continue
+                if category == "player_anytime_td" and side != "Yes":
+                    continue
+                implied_fair = (quote["probability"] / total_implied
+                                if total_implied > 0 else quote["probability"])
+                entries.append({
+                    "game": f'{game["away_abbr"]} @ {game["home_abbr"]}',
+                    "team": team, "player": player,
+                    "market": MARKET_LABELS[category],
+                    "selection": side,
+                    "line": str(quote["point"]) if quote["point"] is not None else "Yes",
+                    "odds": display_odds(quote["price"]),
+                    "market_prob": implied_fair,
+                    "score": None,
+                    "note": "Awaiting independent historical-stat analysis",
+                    "source": "DraftKings via The Odds API",
+                })
         output[game_id] = entries
     return output, calls, warnings
 
@@ -284,39 +285,41 @@ def imported_props(path, games):
 
 
 def sort_key(item):
-    return (item["score"] is None, -(item["score"] or 0),
+    # Picks supported by recent actual stats rank first; PASS candidates last.
+    status = item.get("status") or "PASS: no model"
+    quality = item.get("elite_score")
+    return (quality is None, not status.startswith("REVIEW"),
+            -(quality or 0), -(item.get("edge_pct") or -999),
             item["player"].casefold(), item["market"])
 
 
 def choose_top_12(candidates, game):
-    """Try 6 unique team-specific selections each, then backfill to 12."""
-    # Deduplicate overlapping feeds and exact repeats.
+    """One side per player/market, six selections per team if data permits."""
     unique = {}
     for item in candidates:
-        key = (item["team"], item["player"].casefold(), item["market"], item["selection"], item["line"])
+        key = (item["team"], item["player"].casefold(), item["market"], item["line"])
         if key not in unique or sort_key(item) < sort_key(unique[key]):
             unique[key] = item
     pool = sorted(unique.values(), key=sort_key)
     chosen = []
     consumed = set()
     for team in (game["away_abbr"], game["home_abbr"]):
-        seen_players = set()
-        team_rows = [r for r in pool if r["team"] == team]
+        team_rows = [row for row in pool if row["team"] == team]
+        seen_people = set()
         for row in team_rows:
-            if len(seen_players) >= 6:
+            if len([item for item in chosen if item["team"] == team]) >= 6:
                 break
-            if row["player"].casefold() in seen_players:
+            if row["player"].casefold() in seen_people:
                 continue
             chosen.append(row)
             consumed.add(id(row))
-            seen_players.add(row["player"].casefold())
+            seen_people.add(row["player"].casefold())
         for row in team_rows:
-            if len([r for r in chosen if r["team"] == team]) >= 6:
+            if len([item for item in chosen if item["team"] == team]) >= 6:
                 break
             if id(row) not in consumed:
                 chosen.append(row)
                 consumed.add(id(row))
-    # Fill remaining slots if one side has fewer markets, without inventing picks.
     for row in pool:
         if len(chosen) >= 12:
             break
@@ -341,13 +344,16 @@ def game_lines(game):
 
 def make_report(groups, day, errors, used_api):
     lines = [
-        "# AGENT DION — TOP 12 PICKS PER GAME",
+        "# AGENT DION — EVIDENCE-BASED TOP 12 PER GAME",
         f"Date (Eastern): {day} | Games: {len(groups)}",
         "",
-        "**Goal: six player-prop selections from EACH team, 12 per matchup, sorted best-to-worst.**",
-        "Elite Rank 99–88 is DISPLAY ORDER within each game, not a 99% success claim.",
-        "Market % is derived from quoted market-implied prices, NOT an independent forecast, value edge, or win-rate estimate.",
-        "Missing player props are never invented. Check injury, status, freshness and DraftKings lines.",
+        "**Scores reflect sample size, model-vs-price edge, trend consistency and freshness.**",
+        "The model is NOT retrospectively validated or calibrated: probability and edge",
+        "estimates are speculative until out-of-sample tests establish reliability.",
+        "Six unique-player props per team are preferred, 12 total per game.",
+        "REVIEW means a research candidate, never an automatic bet recommendation.",
+        "HOLD/PASS selections must not be treated as eligible bets.",
+        "The final NFL inactive list must be confirmed close to kickoff.",
         "",
     ]
     for game, kickoff, picks in groups:
@@ -356,29 +362,32 @@ def make_report(groups, day, errors, used_api):
         home = sum(p["team"] == game["home_abbr"] for p in picks)
         lines += [
             f"## {title} — {kickoff}",
-            f"**Player picks: {len(picks)}/12 | {game['away_abbr']}: {away} | {game['home_abbr']}: {home}**",
+            f"**Candidates: {len(picks)}/12 | {game['away_abbr']}: {away} | {game['home_abbr']}: {home}**",
             "",
-            "| # | Elite Rank | Market % | Team | Player | Market | Pick | Line | Odds |",
-            "|---:|---:|---:|---|---|---|---|---|---:|",
+            "| # | Elite /100 | Team | Player | Prop | Side | Line | Odds | Model % | Edge pp | L5 | L10 | Projected | Injury | Decision |",
+            "|---:|---:|---|---|---|---|---:|---:|---:|---:|---|---|---:|---|---|",
         ]
         for rank, p in enumerate(picks, 1):
-            score = f'{p["score"]}/100' if p["score"] is not None else "N/R"
-            values = [rank, f"{100-rank}/100", score, p["team"], p["player"], p["market"],
-                      p["selection"], p["line"], p["odds"]]
+            score = f'{p.get("elite_score")}/100' if p.get("elite_score") is not None else "N/R"
+            model = f'{p.get("model_pct"):.1f}' if p.get("model_pct") is not None else "N/R"
+            edge = f'{p.get("edge_pct"):+.1f}' if p.get("edge_pct") is not None else "N/R"
+            projection = str(p.get("projection")) if p.get("projection") is not None else "N/R"
+            values = [rank, score, p["team"], p["player"], p["market"],
+                      p["selection"], p["line"], p["odds"], model, edge,
+                      p.get("last5", "N/R"), p.get("last10", "N/R"),
+                      projection, p.get("injury", "Unknown"), p.get("status", "PASS: not evaluated")]
             lines.append("| " + " | ".join(safe(value) for value in values) + " |")
         if not picks:
-            lines.append("| — | — | — | — | No verified player-prop feed | — | — | — | — |")
+            lines.append("| — | — | — | No verified player props available | — | — | — | — | — | — | — | — | — | — | — |")
         if len(picks) < 10:
-            lines.append(f"\n**DATA SHORTFALL:** Only {len(picks)} verified/attributed markets; cannot honestly supply 10–12.")
+            lines.append(f"\n**DATA SHORTFALL:** Only {len(picks)} attributable markets; 10–12 cannot be guaranteed.")
         lines += ["", f"**Game lines (reference only):** {game_lines(game)}", ""]
     if errors:
-        lines += ["### Feed warnings", *("- " + safe(msg) for msg in errors), ""]
+        lines += ["### Data warnings", *("- " + safe(msg) for msg in errors), ""]
     if not used_api:
-        lines.append("Live prop feed was not enabled; set ODDS_API_KEY to retrieve available DraftKings props.")
-    lines += [
-        "Market quotes and source coverage may change; no ticket or bet was submitted.",
-        "Output is a research board, not investment or wagering advice.",
-    ]
+        lines.append("Live props disabled: set ODDS_API_KEY (The Odds API) for DraftKings lines.")
+    lines += ["No bets placed. Confirm all odds and active rosters independently.",
+              "A pregame model/backtest and postgame grading are still required to validate true edge."]
     return "\n".join(lines)
 
 
@@ -423,10 +432,19 @@ def main():
     else:
         warnings.append("No live DraftKings prop feed; ODDS_API_KEY missing or --no-live selected.")
     manual = imported_props(args.props, games)
+    from scripts.dion_evidence import evaluate
+    unranked = {game["id"]: live_data.get(game["id"], []) + manual.get(game["id"], [])
+                for game in games}
+    try:
+        predictive, stat_warnings = evaluate(games, unranked, args.date)
+        warnings.extend(stat_warnings)
+    except Exception as exc:
+        predictive = unranked
+        warnings.append(f"Prediction model unavailable: {type(exc).__name__}")
     groups = []
     for game in sorted(games, key=lambda item: item.get("date", "")):
         kickoff = datetime.fromisoformat(game["date"].replace("Z", "+00:00")).astimezone(ET).strftime("%I:%M %p %Z")
-        pool = live_data.get(game["id"], []) + manual.get(game["id"], [])
+        pool = predictive.get(game["id"], [])
         groups.append((game, kickoff, choose_top_12(pool, game)))
 
     report = make_report(groups, args.date, warnings, bool(key and not args.no_live))
@@ -437,21 +455,30 @@ def main():
     if mission.is_dir():
         (mission / "dion_elite_today.md").write_text(report, encoding="utf-8")
 
-    print(f"AGENT DION | {args.date} | {len(groups)} GAMES | SIX PER TEAM / 12 PER GAME")
-    print("ELITE RANK 99-88 = DISPLAY ORDER ONLY; MARKET % IS NOT MODEL HIT PROBABILITY")
+    print(f"AGENT DION | {args.date} | {len(groups)} GAMES | TOP 12 / MATCHUP")
+    print("ELITE = evidence-priority score; not a verified chance of winning.")
+    print("MODEL % and EDGE = preliminary estimates; uncalibrated, not proven.")
     for game, kickoff, picks in groups:
-        print("\n" + "=" * 78)
+        print("\n" + "=" * 80)
         print(f'{game["away_abbr"]} @ {game["home_abbr"]} | {kickoff} | {len(picks)}/12 picks')
-        print("=" * 78)
+        print("=" * 80)
         for rank, row in enumerate(picks, 1):
-            score = f'{row["score"]:02d}/100' if row["score"] is not None else "N/R"
-            print(f'{rank:2d}. {100-rank:02d}/100 | Market {score:>6} | {row["team"]:3s} | {row["player"][:19]:19s} | '
-                  f'{row["market"][:15]:15s} | {row["selection"]} {row["line"]} ({row["odds"]})')
+            elite = f'{row.get("elite_score"):02d}/100' if row.get("elite_score") is not None else "N/R"
+            model = f'{row.get("model_pct"):.1f}%' if row.get("model_pct") is not None else "N/R"
+            edge = f'{row.get("edge_pct"):+.1f}pp' if row.get("edge_pct") is not None else "N/R"
+            print(f'{rank:2d}. {elite:>6} | {row["team"]:3s} | {row["player"][:18]:18s} | '
+                  f'{row["market"][:14]:14s} {row["selection"]} {row["line"]} ({row["odds"]})')
+            print(f'     Model: {model} | Edge: {edge} | L5: {row.get("last5", "N/R")} | '
+                  f'L10: {row.get("last10", "N/R")} | {row.get("status", "PASS")}')
         if len(picks) < 10:
-            print(f'  DATA SHORTFALL: Only {len(picks)} real available picks; no fabricated selections.')
+            print(f'  DATA SHORTFALL: {len(picks)} attributable props; no invented entries.')
         print(f'  Game lines: {game_lines(game)}')
+    if warnings:
+        print("\nDATA WARNINGS:")
+        for msg in warnings:
+            print(" -", msg)
     print(f"\nSAVED: {output}")
-    print(f"New per-event Odds API requests: {credits_calls} (additional usage may apply).")
+    print(f"New per-event Odds API requests: {credits_calls} (usage fees/credits may apply).")
     print("NO BETS PLACED")
     return 0
 
