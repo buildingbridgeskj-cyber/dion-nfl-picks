@@ -196,6 +196,16 @@ def live_props(games, key, roster):
         books = [b for b in detail.get("bookmakers", []) if b.get("key") == "draftkings"]
         for book in books:
             for market in book.get("markets", []):
+                # Reject stale quotes rather than portraying them as current.
+                updated = market.get("last_update")
+                if updated:
+                    try:
+                        age = (datetime.now(ET) -
+                               datetime.fromisoformat(updated.replace("Z", "+00:00")).astimezone(ET)).total_seconds()
+                        if age > 3600 or age < -60:
+                            continue
+                    except (ValueError, TypeError):
+                        continue
                 category = market.get("key")
                 if category not in MARKET_LABELS:
                     continue
