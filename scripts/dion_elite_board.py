@@ -289,7 +289,7 @@ def sort_key(item):
     status = item.get("status") or "PASS: no model"
     quality = item.get("elite_score")
     return (quality is None, not status.startswith("REVIEW"),
-            -(quality or 0), -(item.get("edge_pct") or -999),
+            -(quality or 0), -(item["edge_pct"] if item.get("edge_pct") is not None else -999),
             item["player"].casefold(), item["market"])
 
 
