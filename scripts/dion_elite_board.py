@@ -351,7 +351,7 @@ def make_report(groups, day, errors, used_api):
         "The model is NOT retrospectively validated or calibrated: probability and edge",
         "estimates are speculative until out-of-sample tests establish reliability.",
         "Six unique-player props per team are preferred, 12 total per game.",
-        "REVIEW means a research candidate, never an automatic bet recommendation.",
+        "REVIEW means a research candidate, NOT a verified profitable bet; no validated calibration yet.",
         "HOLD/PASS selections must not be treated as eligible bets.",
         "The final NFL inactive list must be confirmed close to kickoff.",
         "",
@@ -379,8 +379,10 @@ def make_report(groups, day, errors, used_api):
             lines.append("| " + " | ".join(safe(value) for value in values) + " |")
         if not picks:
             lines.append("| — | — | — | No verified player props available | — | — | — | — | — | — | — | — | — | — | — |")
-        if len(picks) < 10:
-            lines.append(f"\n**DATA SHORTFALL:** Only {len(picks)} attributable markets; 10–12 cannot be guaranteed.")
+        modeled = sum(p.get("model_pct") is not None for p in picks)
+        lines.append(f"**Stat-backed selections: {modeled}/12; other rows are PASS / data-incomplete.**")
+        if modeled < 10:
+            lines.append(f"**DATA SHORTFALL:** Only {modeled} picks have a statistics-based estimate. Do not treat unranked props as eligible.")
         lines += ["", f"**Game lines (reference only):** {game_lines(game)}", ""]
     if errors:
         lines += ["### Data warnings", *("- " + safe(msg) for msg in errors), ""]
@@ -470,8 +472,9 @@ def main():
                   f'{row["market"][:14]:14s} {row["selection"]} {row["line"]} ({row["odds"]})')
             print(f'     Model: {model} | Edge: {edge} | L5: {row.get("last5", "N/R")} | '
                   f'L10: {row.get("last10", "N/R")} | {row.get("status", "PASS")}')
-        if len(picks) < 10:
-            print(f'  DATA SHORTFALL: {len(picks)} attributable props; no invented entries.')
+        modeled = sum(row.get("model_pct") is not None for row in picks)
+        if modeled < 10:
+            print(f'  DATA SHORTFALL: {modeled}/12 stat-backed candidates. Missing-data picks are PASS.')
         print(f'  Game lines: {game_lines(game)}')
     if warnings:
         print("\nDATA WARNINGS:")
