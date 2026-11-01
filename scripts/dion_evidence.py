@@ -300,29 +300,50 @@ def estimate_candidate(item, player_games, team_games, team_events, roster_entri
 
 
 def roster_health_from_api(games):
-    """Roster is current only to refresh period; absence from injury list != active."""
+    """Parse ESPN roster/injury sources; absence of a listing is not clearance."""
     result = {}
-    for team in {x for g in games for x in (g["home_abbr"], g["away_abbr"])}:
-        try:
-            data = fetch(f"teams/{team}/roster", ttl=1800)
-        except Exception:
-            continue
-        def walk(items):
-            if isinstance(items, list):
-                for value in items:
-                    walk(value)
-            elif isinstance(items, dict):
-                a = items.get("athlete")
-                if a and isinstance(a, dict):
-                    name = (a.get("fullName") or a.get("displayName") or "").strip()
-                    injury = a.get("injuryStatus") or a.get("status") or items.get("status") or ""
-                    if isinstance(injury, dict):
-                        injury = injury.get("displayName") or injury.get("name") or injury.get("type") or ""
-                    result[(team, name.casefold())] = str(injury)
-                for key in ("athletes", "items"):
-                    if key in items:
-                        walk(items[key])
-        walk(data.get("athletes", []))
+    teams = {x for g in games for x in (g["home_abbr"], g["away_abbr"])}
+    def status_text(value):
+        if isinstance(value, dict):
+            return " ".join(status_text(x) for k, x in value.items()
+                            if k in ("name", "displayName", "description", "abbreviation",
+                                     "type", "status", "injuryStatus", "shortDetail"))
+        if isinstance(value, list):
+            return " ".join(status_text(x) for x in value)
+        return str(value or "")
+
+    def walk(item, team):
+        if isinstance(item, list):
+            for entry in item:
+                walk(entry, team)
+        elif isinstance(item, dict):
+            nested = item.get("athlete")
+            athlete = nested if isinstance(nested, dict) else item
+            name = (athlete.get("fullName") or athlete.get("displayName") or "").strip()
+            if name and (athlete.get("id") or athlete.get("uid")):
+                injury = " ".join([
+                    status_text(athlete.get("injuries")),
+                    status_text(athlete.get("injuryStatus")),
+                    status_text(athlete.get("status")),
+                    status_text(item.get("status")),
+                    status_text(item.get("injury")),
+                ])
+                if injury.strip():
+                    result[(team, name.casefold())] = injury
+            for key in ("athletes", "items", "injuries", "players"):
+                if key in item:
+                    walk(item[key], team)
+
+    for team in teams:
+        for resource, ttl in ((f"teams/{team}/roster", 1800),
+                              (f"teams/{team}/injuries", 900)):
+            try:
+                data = fetch(resource, ttl=ttl)
+            except Exception:
+                continue
+            walk(data.get("athletes", []), team)
+            walk(data.get("injuries", []), team)
+            walk(data.get("items", []), team)
     return result
 
 
